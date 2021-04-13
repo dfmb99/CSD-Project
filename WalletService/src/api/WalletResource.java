@@ -1,5 +1,11 @@
 package api;
 
+import java.io.EOFException;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,14 +31,44 @@ import data.Transaction;
 @Path("/wallet")
 public class WalletResource {
 
-	private final Map<String, Double> userBalances = new HashMap<>();
-	private final List<Transaction> transactions = new ArrayList<>();
+	private final String base_dir = System.getProperty("java.io.tmpdir");
+	private final String filename = "transactions.data";
+	private final Map<String, Double> userBalances;
+	private final List<Transaction> transactions;
+	private final ObjectOutputStream out;
+
+	public WalletResource() throws Exception {
+		this.transactions = new ArrayList<>();
+		this.userBalances = new HashMap<>();
+
+		try {
+			ObjectInputStream is = new ObjectInputStream(new FileInputStream(base_dir + filename));
+			while (true) {
+				try {
+					this.transactions.add((Transaction) is.readObject());
+				} catch (EOFException e) {
+					break;
+				}
+			}
+			
+			this.updateAccountBalances();
+		} catch (IOException e) {
+			// creates file
+			ObjectOutputStream os1 = new ObjectOutputStream(new FileOutputStream(base_dir + filename));
+			os1.close();
+		}
+		out = new ObjectOutputStream(new FileOutputStream(base_dir + filename, true)) {
+			protected void writeStreamHeader() throws IOException {
+				reset();
+			}
+		};
+	}
 
 	@POST
 	@Path("/receive")
 	@Consumes(MediaType.APPLICATION_JSON)
 	@Produces(MediaType.TEXT_PLAIN)
-	public double obtainCoins(ObtainCoinsParams p) {
+	public double obtainCoins(ObtainCoinsParams p) throws IOException {
 		if (!p.isDataValid()) {
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
@@ -42,6 +78,7 @@ public class WalletResource {
 		Transaction t = new Transaction(null, addr, amnt);
 		Double currBalance = userBalances.get(addr);
 		synchronized (this) {
+			out.writeObject(t);
 			transactions.add(t);
 			if (currBalance == null) {
 				userBalances.put(addr, amnt);
@@ -57,7 +94,7 @@ public class WalletResource {
 	@Path("/send")
 	@Consumes(MediaType.APPLICATION_JSON)
 	@Produces(MediaType.APPLICATION_JSON)
-	public void transferCoins(TransferCoinsParams p) {
+	public void transferCoins(TransferCoinsParams p) throws IOException {
 		if (!p.isDataValid()) {
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
@@ -70,6 +107,7 @@ public class WalletResource {
 		}
 		synchronized (this) {
 			Transaction t = new Transaction(sender, receiver, amount);
+			out.writeObject(t);
 			transactions.add(t);
 			userBalances.put(sender, userBalances.get(sender) - amount);
 			Double currBalance = userBalances.get(receiver);
@@ -119,6 +157,29 @@ public class WalletResource {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Updates account balances based on transactions data 
+	 */
+	private void updateAccountBalances() {
+		// Sync transaction list and updates every account balance in memory
+		Double currBalance;
+		for (Transaction t : transactions) {
+			String receiver = t.getReceiver();
+			String sender = t.getSender();
+			double amnt = t.getAmount();
+
+			currBalance = userBalances.get(receiver);
+			if (currBalance == null) {
+				userBalances.put(receiver, amnt);
+			} else {
+				userBalances.put(receiver, currBalance + amnt);
+			}
+			if (sender != null) {
+				userBalances.put(sender, userBalances.get(sender) - amnt);
+			}
+		}
 	}
 
 }

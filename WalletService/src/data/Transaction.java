@@ -1,10 +1,15 @@
 package data;
 
-public class Transaction {
+import java.io.Serializable;
+
+public class Transaction implements Serializable {
 	
+	private static final long serialVersionUID = -3167265013825626676L;
 	private String sender;
 	private String receiver;
 	private double amount;
+	
+	public Transaction() { }
 	
 	public Transaction(String sender, String receiver, double amount) {
 		this.sender = sender;
