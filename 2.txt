@@ -1,6 +1,7 @@
 mvn exec:java -Dexec.mainClass=api.CounterServer -Dexec.args="1"
 mvn exec:java -Dexec.mainClass=api.CounterClient -Dexec.args="1001 1 100"
 cd mnt/c/Users/danie/Documents/Faculdade/CSD_git/CSD-Project/WalletService/
+java -Djava.security.properties="./config/java.security" -Dlogback.configurationFile="./config/logback.xml" -cp bin/*:lib/* main.java.api.CounterServer 0
 
 <dependency>
 	    <groupId>com.github.bft-smart</groupId>
