@@ -1,10 +1,14 @@
 package api;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInput;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,21 +27,28 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response.Status;
 
+import bftsmart.demo.counter.CounterServer;
+import bftsmart.tom.MessageContext;
+import bftsmart.tom.ServiceReplica;
+import bftsmart.tom.server.defaultservices.DefaultSingleRecoverable;
 import data.ObtainCoinsParams;
-import data.TransferCoinsParams;
 import data.Transaction;
+import data.TransferCoinsParams;
 
 @Singleton
 @Path("/wallet")
-public class WalletResource {
+public class WalletResource extends DefaultSingleRecoverable {
 
 	private final String base_dir = System.getProperty("java.io.tmpdir");
 	private final String filename = "transactions.data";
 	private final Map<String, Double> userBalances;
-	private final List<Transaction> transactions;
+	private List<Transaction> transactions;
 	private final ObjectOutputStream out;
 
-	public WalletResource() throws Exception {
+	public WalletResource(int id) throws Exception {
+		// bft smart replica init
+		new ServiceReplica(id, this, this);
+		
 		this.transactions = new ArrayList<>();
 		this.userBalances = new HashMap<>();
 
@@ -52,6 +63,7 @@ public class WalletResource {
 			}
 			
 			this.updateAccountBalances();
+			is.close();
 		} catch (IOException e) {
 			// creates file
 			ObjectOutputStream os1 = new ObjectOutputStream(new FileOutputStream(base_dir + filename));
@@ -181,5 +193,73 @@ public class WalletResource {
 			}
 		}
 	}
+	
+	  @Override
+	    public byte[] appExecuteUnordered(byte[] command, MessageContext msgCtx) {         
+	        try {
+	            ByteArrayOutputStream out = new ByteArrayOutputStream(4);
+	            new ObjectOutputStream(out).writeObject(this.transactions); 
+	            return out.toByteArray();
+	        } catch (IOException ex) {
+	            System.err.println("Invalid request received!");
+	            return new byte[0];
+	        }
+	    }
+	  
+	    @Override
+	    public byte[] appExecuteOrdered(byte[] command, MessageContext msgCtx) {
+	        try {	        
+	            ByteArrayOutputStream out = new ByteArrayOutputStream(4);
+	            new ObjectOutputStream(out).writeObject(this.transactions); 
+	            return out.toByteArray();
+	        } catch (IOException ex) {
+	            System.err.println("Invalid request received!");
+	            return new byte[0];
+	        }
+	    }
+	    
+	    @SuppressWarnings("unchecked")
+	    @Override
+	    public void installSnapshot(byte[] state) {
+	        try {
+	            ByteArrayInputStream bis = new ByteArrayInputStream(state);
+	            ObjectInput in = new ObjectInputStream(bis);
+	            try {
+					this.transactions = (List<Transaction>) in.readObject();
+				} catch (Exception e) {
+					System.out.println("ERROR");
+					e.printStackTrace();
+				}
+	            in.close();
+	            bis.close();
+	        } catch (IOException e) {
+	            System.err.println("[ERROR] Error deserializing state: "
+	                    + e.getMessage());
+	        }
+	    }
+
+	    @Override
+	    public byte[] getSnapshot() {
+	        try {
+	            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+	            ObjectOutput out = new ObjectOutputStream(bos);
+	            out.writeObject(this.transactions);
+	            out.flush();
+	            bos.flush();
+	            out.close();
+	            bos.close();
+	            return bos.toByteArray();
+	        } catch (IOException ioe) {
+	            System.err.println("[ERROR] Error serializing state: "
+	                    + ioe.getMessage());
+	            return "ERROR".getBytes();
+	        }
+	    }
+	    
+	    public static void main(String[] args) throws Exception {
+			WalletResource w = new WalletResource(1);
+			System.out.println(w.getTransactionsData());
+		}
+
 
 }

@@ -1,0 +1,10 @@
+mvn exec:java -Dexec.mainClass=api.CounterServer -Dexec.args="1"
+mvn exec:java -Dexec.mainClass=api.CounterClient -Dexec.args="1001 1 100"
+cd mnt/c/Users/danie/Documents/Faculdade/CSD_git/CSD-Project/WalletService/
+
+<dependency>
+	    <groupId>com.github.bft-smart</groupId>
+	    <artifactId>library</artifactId>
+	    <version>1.2</version>
+	</dependency>
+<dependency>
